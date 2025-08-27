@@ -55,7 +55,7 @@ class Zombie:
         self.game.occupied_holes.add(pos)
         
         self.base_y = self.rect.bottom
-        self.target_y = self.base_y - 40
+        self.target_y = self.base_y - 40 
         self.rising = True
         self.falling = False
         self.idle_timer = 0
@@ -129,10 +129,31 @@ class WhackAZombie:
 
         self.occupied_holes = set()
 
-        self.zombies[0].spawn()
-
         # set state
         self.state = "intro"
+
+    def spawn_wave(self):
+        group_size = random.randint(1, 4)
+        available = [h for h in self.holes if h not in self.occupied_holes]
+        if len(available) < group_size:
+            group_size = len(available)
+
+        for _ in range(group_size):
+            if not available:
+                break
+            pos = random.choice(available)
+            available.remove(pos)
+
+            color = "red" if random.random() < 0.2 else "green"
+            z = Zombie(self.zombie_frames[color], self.holes, self)
+            z.rect.midbottom = (pos[0] + 100, pos[1] + 120)
+            z.base_y = z.rect.bottom
+            z.target_y = z.base_y - 40
+            z.rising = True
+            z.active = True
+            z.current_hole = pos
+            self.occupied_holes.add(pos)
+            self.zombies.append(z)
 
     def load_zombie_frames(self, color):
         idle = [
@@ -191,6 +212,9 @@ class WhackAZombie:
             zombie.draw(self.screen)
 
     def run(self):
+        spawn_timer = 0
+        spawn_interval = 2000
+
         while True:
             dt = self.clock.tick(FPS)
             self.handle_events()
@@ -200,6 +224,12 @@ class WhackAZombie:
             elif self.state == "play":
                 for zombie in self.zombies:
                     zombie.update(dt)
+                self.zombies = [z for z in self.zombies if z.active or z.rising or z.falling]
+
+                spawn_timer += dt
+                if spawn_timer >= spawn_interval:
+                    self.spawn_wave()
+                    spawn_timer = 0
                 self.draw_play()
 
             pygame.display.update()
