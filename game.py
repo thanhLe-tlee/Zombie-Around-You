@@ -39,13 +39,23 @@ class Zombie:
         self.cooldown_duration = random.randint(500, 1500)
         self.reset()
 
+        # For got-hit/fade-out
+        self.hit = False
+        self.alpha = 255
+        self.fade_speed = 10  # alpha decrease per frame when hit
+
     def reset(self):
         self.active = False
         self.rect.topleft = (-200, 200)
+        self.hit = False
+        self.alpha = 255
+        self.state = "idle"
+        self.frame_index = 0
+        self.image = self.frames[self.state][self.frame_index]
 
     def spawn(self):
         available = [h for h in self.holes if h not in self.game.occupied_holes]
-        if not available: 
+        if not available:
             return
         self.active = True
         pos = random.choice(available)
@@ -53,12 +63,19 @@ class Zombie:
 
         self.current_hole = pos
         self.game.occupied_holes.add(pos)
-        
+
         self.base_y = self.rect.bottom
-        self.target_y = self.base_y - 40 
+        self.target_y = self.base_y - 40
         self.rising = True
         self.falling = False
         self.idle_timer = 0
+
+        # Reset hit/fade state and animation
+        self.hit = False
+        self.alpha = 255
+        self.state = "idle"
+        self.frame_index = 0
+        self.image = self.frames[self.state][self.frame_index]
 
     def update(self, dt):
         if not self.active:
@@ -72,6 +89,17 @@ class Zombie:
             self.animation_timer = 0
             self.frame_index = (self.frame_index + 1) % len(self.frames[self.state])
             self.image = self.frames[self.state][self.frame_index]
+
+        if self.hit:
+            # Fade out
+            self.alpha -= self.fade_speed
+            if self.alpha <= 0:
+                self.alpha = 0
+                self.active = False
+                self.hit = False
+                if hasattr(self, "current_hole"):
+                    self.game.occupied_holes.discard(self.current_hole)
+            return
 
         if self.rising:
             if self.rect.bottom > self.target_y:
@@ -95,7 +123,19 @@ class Zombie:
 
     def draw(self, screen):
         if self.active:
-            screen.blit(self.image, self.rect)
+            img = self.image.copy()
+            if self.hit:
+                img.set_alpha(self.alpha)
+            screen.blit(img, self.rect)
+
+    def check_hit(self, pos):
+        if self.active and not self.hit and self.rect.collidepoint(pos):
+            self.state = "dead"
+            self.frame_index = 0
+            self.hit = True
+            self.alpha = 255
+            return True
+        return False
 
 
 class WhackAZombie:
@@ -104,10 +144,15 @@ class WhackAZombie:
         pygame.display.set_caption("Whack a Zombie")
         self.clock = pygame.time.Clock()
 
-        # Load assets
+    # Load assets
         self.intro_bg = pygame.transform.scale(pygame.image.load("images/intro_bg.jpg"), (WIDTH, HEIGHT))
         self.game_bg = pygame.transform.scale(pygame.image.load("images/background.jpg"), (WIDTH, HEIGHT))
         self.hole_img = pygame.transform.scale(pygame.image.load("images/hole.png"), (200, 150))
+
+        # Load hammer image for custom cursor
+        self.hammer_img = pygame.image.load("images/hammer.jpg")
+        self.hammer_img = pygame.transform.scale(self.hammer_img, (80, 80))
+        self.cursor_visible = True
 
         # set fonts
         self.font = pygame.font.SysFont(None, 80)
@@ -129,8 +174,22 @@ class WhackAZombie:
 
         self.occupied_holes = set()
 
+
         # set state
         self.state = "intro"
+
+        # Hammer and health variables
+        self.hammer_duration = 20
+        self.hammer_duration_max = 20
+        self.health_condition = 5
+        self.health_condition_max = 5
+        self.last_health_tick = pygame.time.get_ticks()
+
+        pygame.mixer.music.load("assets/sound/background-theme.mp3")  # or .wav/.ogg
+        pygame.mixer.music.play(-1)  # -1 means loop forever
+
+        # Load boing sound effect
+        self.boing_sound = pygame.mixer.Sound("assets/sound/Cartoon Boing.mp3")
 
     def spawn_wave(self):
         group_size = random.randint(1, 4)
@@ -176,12 +235,43 @@ class WhackAZombie:
                 pygame.quit()
                 sys.exit()
 
+            if event.type == ACTIVEEVENT:
+                # Window focus or mouse enter/leave
+                if hasattr(event, 'gain') and hasattr(event, 'state'):
+                    if event.state == 2:  # 2 = mouse focus
+                        if event.gain == 1:
+                            pygame.mouse.set_visible(True)
+                            self.cursor_visible = False
+                        else:
+                            pygame.mouse.set_visible(True)
+                            self.cursor_visible = True
+
             if self.state == "intro":
                 if event.type == MOUSEBUTTONDOWN and event.button == 1:
                     if self.start_button_rect.collidepoint(event.pos):
                         self.state = "play"
                         for z in self.zombies:
                             z.spawn()
+            elif self.state == "play":
+                if event.type == MOUSEBUTTONDOWN and event.button == 1:
+                    # Only allow hit if hammer duration > 0
+                    if self.hammer_duration > 0:
+                        # Reduce hammer duration by 2 on every click
+                        if self.hammer_duration > 2:
+                            self.hammer_duration -= 5
+                        else:
+                            self.hammer_duration = 0
+                        # Try to hit a zombie
+                        for zombie in self.zombies:
+                            if zombie.check_hit(event.pos):
+                                self.boing_sound.play()
+                                # Only increase if not at max and hammer_duration > 0
+                                if self.hammer_duration < self.hammer_duration_max:
+                                    self.hammer_duration = min(self.hammer_duration + 6, self.hammer_duration_max)
+                                # Only increase health if not at max
+                                if self.health_condition < self.health_condition_max:
+                                    self.health_condition = min(self.health_condition + 1, self.health_condition_max)
+                                break  # Only hit one zombie per click
 
     def draw_intro(self):
         self.screen.blit(self.intro_bg, (0, 0))
@@ -211,13 +301,41 @@ class WhackAZombie:
         for zombie in self.zombies:
             zombie.draw(self.screen)
 
+        # Display hammer duration and health condition
+        hammer_text = self.small_font.render(f"Hammer: {self.hammer_duration}/{self.hammer_duration_max}", True, (255,255,0))
+        health_text = self.small_font.render(f"Health: {self.health_condition}/{self.health_condition_max}", True, (0,255,0))
+        self.screen.blit(hammer_text, (20, 20))
+        self.screen.blit(health_text, (20, 60))
+
+        # Draw hammer cursor if mouse is inside window
+        if not self.cursor_visible:
+            pygame.mouse.set_visible(False)
+            mx, my = pygame.mouse.get_pos()
+            # Offset so hammer tip is at mouse
+            self.screen.blit(self.hammer_img, (mx - 40, my - 10))
+
     def run(self):
         spawn_timer = 0
         spawn_interval = 2000
 
+        # Hide system cursor at start if mouse is inside window
+        if pygame.mouse.get_focused() and self:
+            pygame.mouse.set_visible(False)
+            self.cursor_visible = False
+        else:
+            pygame.mouse.set_visible(True)
+            self.cursor_visible = True
+
         while True:
             dt = self.clock.tick(FPS)
             self.handle_events()
+
+            # Decrease health_condition by 1 every second
+            now = pygame.time.get_ticks()
+            if self.state == "play" and now - self.last_health_tick >= 1000:
+                if self.health_condition > 0:
+                    self.health_condition -= 1
+                self.last_health_tick = now
 
             if self.state == "intro":
                 self.draw_intro()
