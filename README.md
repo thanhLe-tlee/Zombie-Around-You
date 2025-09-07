@@ -14,7 +14,7 @@ A simple arcade-style **Whack-a-Mole** game implemented in **Python + Pygame**, 
 - **Controls:**
   - **Mouse Left Click** → Swing hammer & hit zombies.
   - **P** → Pause / Resume game.
-  - **M** → Mute / Unmute background music (hit sound still plays).
+  - **M** → Mute / Unmute background music.
   - **Quit** → Close the window.
 
 - **Game Flow:**
@@ -49,10 +49,6 @@ A simple arcade-style **Whack-a-Mole** game implemented in **Python + Pygame**, 
 
 Accuracy is calculated as:
 
-\[
-\text{Accuracy} = \frac{\text{Hits}}{\text{Hits + Misses}} \times 100\%
-\]
-
 Accuracy = Hits / (Hits + Misses) x 100%
 
 ---
@@ -85,4 +81,5 @@ Accuracy = Hits / (Hits + Misses) x 100%
 
 Developed by **Le Quang Thanh & Doan The Anh**  
 For **Assignment 1 – Game Programming Course (Whack-a-Zombie)**.
+
 
