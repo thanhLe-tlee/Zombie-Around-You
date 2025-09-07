@@ -49,9 +49,8 @@ A simple arcade-style **Whack-a-Mole** game implemented in **Python + Pygame**, 
 
 Accuracy is calculated as:
 
-\[
-\text{Accuracy} = \frac{\text{Hits}}{\text{Hits + Misses}} \times 100\%
-\]  
+Accuracy = Hits / (Hits + Misses) × 100%
+ 
 
 ---
 
@@ -83,3 +82,4 @@ Accuracy is calculated as:
 
 Developed by **Le Quang Thanh & Doan The Anh**  
 For **Assignment 1 – Game Programming Course (Whack-a-Zombie)**.
+
