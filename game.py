@@ -13,10 +13,11 @@ BLACK = (0, 0, 0)
 
 
 class Zombie:
-    def __init__(self, frames, holes, game):
+    def __init__(self, frames, holes, game, color):
         self.frames = frames  # {"idle": [...], "dead": [...]}
         self.holes = holes
         self.game = game
+        self.color = color
 
         self.state = "idle"
         self.frame_index = 0
@@ -80,8 +81,6 @@ class Zombie:
     def update(self, dt):
         if not self.active:
             self.cooldown_timer += dt
-            if self.cooldown_timer >= self.cooldown_duration:
-                self.spawn()
             return
 
         self.animation_timer += dt
@@ -120,6 +119,8 @@ class Zombie:
                 self.active = False 
                 if hasattr(self, "current_hole"):
                     self.game.occupied_holes.discard(self.current_hole)
+                if not self.hit:
+                    self.game.misses += 1
 
     def draw(self, screen):
         if self.active:
@@ -144,15 +145,20 @@ class WhackAZombie:
         pygame.display.set_caption("Whack a Zombie")
         self.clock = pygame.time.Clock()
 
-    # Load assets
+        # Load assets
         self.intro_bg = pygame.transform.scale(pygame.image.load("images/intro_bg.jpg"), (WIDTH, HEIGHT))
         self.game_bg = pygame.transform.scale(pygame.image.load("images/background.jpg"), (WIDTH, HEIGHT))
         self.hole_img = pygame.transform.scale(pygame.image.load("images/hole.png"), (200, 150))
 
         # Load hammer image for custom cursor
-        self.hammer_img = pygame.image.load("images/hammer.jpg")
+        self.hammer_img = pygame.image.load("images/hammer.png")
         self.hammer_img = pygame.transform.scale(self.hammer_img, (80, 80))
         self.cursor_visible = True
+
+        # get hammer swing state
+        self.hammer_swing = False
+        self.hammer_swing_start = 0
+        self.hammer_swing_duration = 150
 
         # set fonts
         self.font = pygame.font.SysFont(None, 80)
@@ -168,8 +174,8 @@ class WhackAZombie:
         }
 
         self.zombies = [
-            Zombie(self.zombie_frames["red"], self.holes, self),
-            Zombie(self.zombie_frames["green"], self.holes, self)
+            Zombie(self.zombie_frames["red"], self.holes, self, "red"),
+            Zombie(self.zombie_frames["green"], self.holes, self, "green")
         ]
 
         self.occupied_holes = set()
@@ -178,12 +184,18 @@ class WhackAZombie:
         # set state
         self.state = "intro"
 
-        # Hammer and health variables
-        self.hammer_duration = 20
-        self.hammer_duration_max = 20
-        self.health_condition = 5
-        self.health_condition_max = 5
-        self.last_health_tick = pygame.time.get_ticks()
+        # score init
+        self.score = 0
+        self.hits = 0
+        self.misses = 0
+
+        # set timer 
+        self.time_limit = 60_000 
+        self.time_left = self.time_limit
+        self.start_time = None
+
+        self.sound_enabled = True
+
 
         pygame.mixer.music.load("assets/sound/background-theme.mp3")  # or .wav/.ogg
         pygame.mixer.music.play(-1)  # -1 means loop forever
@@ -193,6 +205,9 @@ class WhackAZombie:
 
     def spawn_wave(self):
         group_size = random.randint(1, 4)
+        color = "red" if random.random() < 0.2 else "green"
+        z = Zombie(self.zombie_frames[color], self.holes, self, color)
+
         available = [h for h in self.holes if h not in self.occupied_holes]
         if len(available) < group_size:
             group_size = len(available)
@@ -204,7 +219,7 @@ class WhackAZombie:
             available.remove(pos)
 
             color = "red" if random.random() < 0.2 else "green"
-            z = Zombie(self.zombie_frames[color], self.holes, self)
+            z = Zombie(self.zombie_frames[color], self.holes, self, color)
             z.rect.midbottom = (pos[0] + 100, pos[1] + 120)
             z.base_y = z.rect.bottom
             z.target_y = z.base_y - 40
@@ -235,43 +250,143 @@ class WhackAZombie:
                 pygame.quit()
                 sys.exit()
 
-            if event.type == ACTIVEEVENT:
-                # Window focus or mouse enter/leave
-                if hasattr(event, 'gain') and hasattr(event, 'state'):
-                    if event.state == 2:  # 2 = mouse focus
-                        if event.gain == 1:
-                            pygame.mouse.set_visible(True)
-                            self.cursor_visible = False
-                        else:
-                            pygame.mouse.set_visible(True)
-                            self.cursor_visible = True
+            if event.type == KEYDOWN and event.key == K_p:
+                if self.state == "play":
+                    self.state = "pause"
+                    self.time_left = self.time_limit - (pygame.time.get_ticks() - self.start_time)
+                elif self.state == "pause":
+                    self.start_time = pygame.time.get_ticks() - (self.time_limit - self.time_left)
+                    self.state = "play"
+
+            if event.type == KEYDOWN and event.key == K_m:
+                if self.sound_enabled:
+                    pygame.mixer.music.pause()
+                    self.sound_enabled = False
+                else:
+                    pygame.mixer.music.unpause()
+                    self.sound_enabled = True
+
+
 
             if self.state == "intro":
                 if event.type == MOUSEBUTTONDOWN and event.button == 1:
                     if self.start_button_rect.collidepoint(event.pos):
                         self.state = "play"
+                        self.start_time = pygame.time.get_ticks()
+                        self.time_left = self.time_limit
                         for z in self.zombies:
                             z.spawn()
+
             elif self.state == "play":
                 if event.type == MOUSEBUTTONDOWN and event.button == 1:
-                    # Only allow hit if hammer duration > 0
-                    if self.hammer_duration > 0:
-                        # Reduce hammer duration by 2 on every click
-                        if self.hammer_duration > 2:
-                            self.hammer_duration -= 5
-                        else:
-                            self.hammer_duration = 0
-                        # Try to hit a zombie
-                        for zombie in self.zombies:
-                            if zombie.check_hit(event.pos):
-                                self.boing_sound.play()
-                                # Only increase if not at max and hammer_duration > 0
-                                if self.hammer_duration < self.hammer_duration_max:
-                                    self.hammer_duration = min(self.hammer_duration + 6, self.hammer_duration_max)
-                                # Only increase health if not at max
-                                if self.health_condition < self.health_condition_max:
-                                    self.health_condition = min(self.health_condition + 1, self.health_condition_max)
-                                break  # Only hit one zombie per click
+                    self.hammer_swing = True
+                    self.hammer_swing_start = pygame.time.get_ticks()
+                    for zombie in self.zombies:
+                        if zombie.check_hit(event.pos):
+                            self.boing_sound.play()
+                            if zombie.color == "red":
+                                self.score += 2
+                            else:
+                                self.score += 1
+                            self.hits += 1
+                            break
+
+            elif self.state == "pause":
+                if event.type == MOUSEBUTTONDOWN and event.button == 1:
+                    if self.continue_button_rect.collidepoint(event.pos):
+                        # Resume
+                        self.start_time = pygame.time.get_ticks() - (self.time_limit - self.time_left)
+                        self.state = "play"
+                    elif self.intro_button_rect.collidepoint(event.pos):
+                        # Reset về intro
+                        self.score = 0
+                        self.hits = 0
+                        self.misses = 0
+                        self.zombies.clear()
+                        self.occupied_holes.clear()
+                        self.state = "intro"
+
+
+            elif self.state == "timesup":
+                if event.type == MOUSEBUTTONDOWN and event.button == 1:
+                    if self.play_again_rect.collidepoint(event.pos):
+                        self.score = 0
+                        self.hits = 0
+                        self.misses = 0
+                        self.zombies.clear()
+                        self.occupied_holes.clear()
+                        self.start_time = pygame.time.get_ticks()
+                        self.time_left = self.time_limit
+                        self.state = "play"
+                    elif self.intro_button_rect.collidepoint(event.pos):
+                        self.score = 0
+                        self.hits = 0
+                        self.misses = 0
+                        self.zombies.clear()
+                        self.occupied_holes.clear()
+                        self.state = "intro"
+
+    # def handle_events(self):
+    #     for event in pygame.event.get():
+    #         if event.type == QUIT:
+    #             pygame.quit()
+    #             sys.exit()
+
+    #         if event.type == ACTIVEEVENT:
+    #             # Window focus or mouse enter/leave
+    #             if hasattr(event, 'gain') and hasattr(event, 'state'):
+    #                 if event.state == 2: 
+    #                     if event.gain == 1:
+    #                         pygame.mouse.set_visible(True)
+    #                         self.cursor_visible = False
+    #                     else:
+    #                         pygame.mouse.set_visible(True)
+    #                         self.cursor_visible = True
+
+    #         if self.state == "intro":
+    #             if event.type == MOUSEBUTTONDOWN and event.button == 1:
+    #                 if self.start_button_rect.collidepoint(event.pos):
+    #                     self.state = "play"
+    #                     self.start_time = pygame.time.get_ticks()
+    #                     self.time_left = self.time_limit
+    #                     for z in self.zombies:
+    #                         z.spawn()
+    #         elif self.state == "play":
+    #             if event.type == MOUSEBUTTONDOWN and event.button == 1:
+    #                 # Only allow hit if hammer duration > 0
+    #                 self.hammer_swing = True
+    #                 self.hammer_swing_start = pygame.time.get_ticks()
+    #                 for zombie in self.zombies:
+    #                     if zombie.check_hit(event.pos):
+    #                         self.boing_sound.play()
+    #                         if zombie.color == "red":
+    #                             self.score += 2
+    #                         else:
+    #                             self.score += 1
+    #                         self.hits += 1
+    #                         break
+    #         elif self.state == "timesup":
+    #             if event.type == MOUSEBUTTONDOWN and event.button == 1:
+    #                 if self.play_again_rect.collidepoint(event.pos):
+    #                     # reset game
+    #                     self.score = 0
+    #                     self.hits = 0
+    #                     self.misses = 0
+    #                     self.zombies.clear()
+    #                     self.occupied_holes.clear()
+    #                     self.start_time = pygame.time.get_ticks()
+    #                     self.time_left = self.time_limit
+    #                     self.state = "play"
+
+    #                 elif self.intro_button_rect.collidepoint(event.pos):
+    #                     self.score = 0
+    #                     self.hits = 0
+    #                     self.misses = 0
+    #                     self.zombies.clear()
+    #                     self.occupied_holes.clear()
+    #                     self.state = "intro"
+
+
 
     def draw_intro(self):
         self.screen.blit(self.intro_bg, (0, 0))
@@ -302,17 +417,111 @@ class WhackAZombie:
             zombie.draw(self.screen)
 
         # Display hammer duration and health condition
-        hammer_text = self.small_font.render(f"Hammer: {self.hammer_duration}/{self.hammer_duration_max}", True, (255,255,0))
-        health_text = self.small_font.render(f"Health: {self.health_condition}/{self.health_condition_max}", True, (0,255,0))
-        self.screen.blit(hammer_text, (20, 20))
-        self.screen.blit(health_text, (20, 60))
+        score_text = self.font.render(f"Score: {self.score}", True, (255, 255, 0))
+        self.screen.blit(score_text, (WIDTH//2 - score_text.get_width()//2, 20))
+
+        hits_text = self.small_font.render(f"Hits: {self.hits}", True, (0, 255, 0))
+        misses_text = self.small_font.render(f"Misses: {self.misses}", True, (255, 0, 0))
+
+        if self.hits + self.misses > 0:
+            accuracy = (self.hits / (self.hits + self.misses)) * 100
+        else:
+            accuracy = 0
+        accuracy_text = self.small_font.render(f"Accuracy: {accuracy:.1f}%", True, (255, 255, 255))
+
+        self.screen.blit(hits_text, (20, 20))
+        self.screen.blit(misses_text, (20, 60))
+        self.screen.blit(accuracy_text, (20, 100))
+
+        seconds_left = self.time_left // 1000
+        time_text = self.small_font.render(f"Time: {seconds_left}", True, (255, 255, 255))
+        self.screen.blit(time_text, (WIDTH - time_text.get_width() - 20, 20))
+
+        sound_text = self.small_font.render(
+        "Music: ON" if self.sound_enabled else "Music: OFF", True, (255, 255, 255))
+        self.screen.blit(sound_text, (WIDTH - sound_text.get_width() - 20, 60))
+
+
 
         # Draw hammer cursor if mouse is inside window
         if not self.cursor_visible:
             pygame.mouse.set_visible(False)
             mx, my = pygame.mouse.get_pos()
-            # Offset so hammer tip is at mouse
-            self.screen.blit(self.hammer_img, (mx - 40, my - 10))
+            hammer_img = self.hammer_img
+            
+            if self.hammer_swing:
+                elapsed = pygame.time.get_ticks() - self.hammer_swing_start
+                if elapsed < self.hammer_swing_duration:
+                    progress = elapsed / self.hammer_swing_duration
+                    angle = 45 * (1 - progress)  
+                    hammer_img = pygame.transform.rotate(self.hammer_img, angle)
+                else:
+                    self.hammer_swing = False
+                    hammer_img = self.hammer_img
+            else:
+                hammer_img = self.hammer_img
+
+            
+            self.screen.blit(hammer_img, (mx - 40, my - 10))
+
+    def draw_timesup(self):
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.set_alpha(180)
+        overlay.fill((0, 0, 0))
+        self.screen.blit(overlay, (0, 0))
+
+        title = self.font.render("TIME'S UP!", True, (255, 0, 0))
+        self.screen.blit(title, (WIDTH//2 - title.get_width()//2, 150))
+
+        stats = [
+            f"Score: {self.score}",
+            f"Hits: {self.hits}",
+            f"Misses: {self.misses}",
+        ]
+        if self.hits + self.misses > 0:
+            accuracy = (self.hits / (self.hits + self.misses)) * 100
+        else:
+            accuracy = 0
+        stats.append(f"Accuracy: {accuracy:.1f}%")
+
+        for i, text in enumerate(stats):
+            line = self.small_font.render(text, True, (255, 255, 255))
+            self.screen.blit(line, (WIDTH//2 - line.get_width()//2, 250 + i*50))
+
+        # Buttons
+        play_again_text = self.small_font.render("Play Again", True, BLACK)
+        intro_text = self.small_font.render("Go Back", True, BLACK)
+
+        self.play_again_rect = pygame.Rect(WIDTH//2 - 150, 450, 300, 50)
+        self.intro_button_rect = pygame.Rect(WIDTH//2 - 150, 520, 300, 50)
+
+        pygame.draw.rect(self.screen, WHITE, self.play_again_rect, border_radius=15)
+        pygame.draw.rect(self.screen, WHITE, self.intro_button_rect, border_radius=15)
+
+        self.screen.blit(play_again_text, (WIDTH//2 - play_again_text.get_width()//2, 460))
+        self.screen.blit(intro_text, (WIDTH//2 - intro_text.get_width()//2, 530))
+
+    def draw_pause(self):
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.set_alpha(180)
+        overlay.fill((0, 0, 0))
+        self.screen.blit(overlay, (0, 0))
+
+        title = self.font.render("PAUSED", True, (255, 255, 0))
+        self.screen.blit(title, (WIDTH//2 - title.get_width()//2, 200))
+
+        continue_text = self.small_font.render("Continue", True, BLACK)
+        intro_text = self.small_font.render("Go Back", True, BLACK)
+
+        self.continue_button_rect = pygame.Rect(WIDTH//2 - 150, 350, 300, 50)
+        self.intro_button_rect = pygame.Rect(WIDTH//2 - 150, 420, 300, 50)
+
+        pygame.draw.rect(self.screen, WHITE, self.continue_button_rect, border_radius=15)
+        pygame.draw.rect(self.screen, WHITE, self.intro_button_rect, border_radius=15)
+
+        self.screen.blit(continue_text, (WIDTH//2 - continue_text.get_width()//2, 360))
+        self.screen.blit(intro_text, (WIDTH//2 - intro_text.get_width()//2, 430))
+
 
     def run(self):
         spawn_timer = 0
@@ -331,15 +540,18 @@ class WhackAZombie:
             self.handle_events()
 
             # Decrease health_condition by 1 every second
-            now = pygame.time.get_ticks()
-            if self.state == "play" and now - self.last_health_tick >= 1000:
-                if self.health_condition > 0:
-                    self.health_condition -= 1
-                self.last_health_tick = now
 
             if self.state == "intro":
+                pygame.mouse.set_visible(True)
+                self.cursor_visible = True
                 self.draw_intro()
             elif self.state == "play":
+                pygame.mouse.set_visible(False) 
+                self.cursor_visible = False
+                elapsed = pygame.time.get_ticks() - self.start_time
+                self.time_left = max(0, self.time_limit - elapsed)
+                if self.time_left == 0:
+                    self.state = "timesup"
                 for zombie in self.zombies:
                     zombie.update(dt)
                 self.zombies = [z for z in self.zombies if z.active or z.rising or z.falling]
@@ -349,6 +561,15 @@ class WhackAZombie:
                     self.spawn_wave()
                     spawn_timer = 0
                 self.draw_play()
+            elif self.state == "timesup":
+                pygame.mouse.set_visible(True) 
+                self.cursor_visible = True
+                self.draw_timesup()
+            elif self.state == "pause":
+                pygame.mouse.set_visible(True)
+                self.cursor_visible = True
+                self.screen.blit(self.game_bg, (0, 0)) 
+                self.draw_pause()
 
             pygame.display.update()
 
