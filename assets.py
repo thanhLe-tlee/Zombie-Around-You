@@ -32,6 +32,7 @@ class AssetLoader:
     def load_sounds():
         # Load sound effects
         pygame.mixer.music.load("assets/sound/background-theme.mp3")
+        pygame.mixer.music.play(-1)
         boing_sound = pygame.mixer.Sound("assets/sound/Cartoon Boing.mp3")
         return boing_sound
 

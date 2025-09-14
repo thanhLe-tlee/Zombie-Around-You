@@ -5,6 +5,7 @@ from constants import WIDTH, HEIGHT, WHITE, BLACK, FPS
 from sprites.zombie import Zombie
 from game_state import GameState
 from ui import GameUI
+from assets import *
 
 pygame.init()
 pygame.mixer.init()
@@ -19,16 +20,12 @@ class WhackAZombie:
 
         # Load assets
         self.images = {
-            'intro_bg': pygame.transform.scale(pygame.image.load("images/intro_bg.jpg"), (WIDTH, HEIGHT)),
-            'game_bg': pygame.transform.scale(pygame.image.load("images/background.jpg"), (WIDTH, HEIGHT)),
-            'hole': pygame.transform.scale(pygame.image.load("images/hole.png"), (200, 150)),
-            'hammer': pygame.transform.scale(pygame.image.load("images/hammer.png"), (80, 80))
+            **AssetLoader.load_images()
         }
 
         # Fonts
         self.fonts = {
-            'large': pygame.font.SysFont(None, 80),
-            'small': pygame.font.SysFont(None, 40)
+            **AssetLoader.load_fonts()
         }
 
         self.ui = GameUI(self.screen, self.fonts, self.images)
@@ -46,15 +43,13 @@ class WhackAZombie:
                       (125, 650), (450, 650), (775, 650)]
 
         self.zombie_frames = {
-            "red": self.load_zombie_frames("red"),
-            "green": self.load_zombie_frames("green"),
+            "red": AssetLoader.load_zombie_frames("red"),
+            "green": AssetLoader.load_zombie_frames("green"),
         }
 
         self.zombies = [] # Zombies will be spawned dynamically
 
-        pygame.mixer.music.load("assets/sound/background-theme.mp3")
-        pygame.mixer.music.play(-1)
-        self.boing_sound = pygame.mixer.Sound("assets/sound/Cartoon Boing.mp3")
+        self.sound = AssetLoader.load_sounds()
 
     def spawn_wave(self):
         group_size = random.randint(1, 4)
@@ -87,21 +82,6 @@ class WhackAZombie:
             zombie.active = True
             zombie.current_hole = pos
             self.game_state.occupied_holes.add(pos)
-
-    def load_zombie_frames(self, color):
-        idle = [
-            pygame.image.load(f"assets/{color}/idle/frame-1.png"),
-            pygame.image.load(f"assets/{color}/idle/frame-2.png"),
-        ]
-        dead = [
-            pygame.image.load(f"assets/{color}/got-hit/frame-1.png"),
-            pygame.image.load(f"assets/{color}/got-hit/frame-2.png"),
-        ]
-
-        idle = [pygame.transform.scale(img, (120,150)) for img in idle]
-        dead = [pygame.transform.scale(img, (120,150)) for img in dead]
-
-        return {"idle": idle, "dead": dead}
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -140,7 +120,7 @@ class WhackAZombie:
                     self.hammer_state['hammer_swing_start'] = pygame.time.get_ticks()
                     for zombie in self.zombies:
                         if zombie.check_hit(event.pos):
-                            self.boing_sound.play()
+                            self.sound.play()
                             if zombie.color == "red":
                                 self.game_state.score += 2
                             else:
