@@ -60,7 +60,7 @@ Accuracy is calculated as:
 1. Install Python (>= 3.8).
 2. Install Pygame:
    ```bash
-   pip install pygame
+   pip install -r requirements.txt
    ```
 3. Clone or download this repository.
 4. Run the game:
