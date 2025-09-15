@@ -49,7 +49,7 @@ A simple arcade-style **Whack-a-Mole** game implemented in **Python + Pygame**, 
 
 Accuracy is calculated as:
 
-Accuracy = Hits\(Hits + Misses) x 100%
+Accuracy = Hits / (Hits + Misses) x 100%
 
 ---
 
