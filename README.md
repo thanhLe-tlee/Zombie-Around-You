@@ -79,5 +79,5 @@ Accuracy = Hits / (Hits + Misses) x 100%
 
 ## 👨‍💻 Author
 
-Developed by **Le Quang Thanh & Doan The Anh**  
+Developed by **Le Quang Thanh (2252749) & Doan The Anh (2252019)**  
 For **Assignment 1 – Game Programming Course (Whack-a-Zombie)**.
