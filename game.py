@@ -60,7 +60,6 @@ class WhackAZombie:
         # Reuse existing zombies if possible
         inactive_zombies = [z for z in self.zombies if not z.active]
 
-        # Spawn new zombies if not enough inactive zombies
         while len(inactive_zombies) < group_size:
             color = "red" if random.random() < 0.2 else "green"
             z = Zombie(self.zombie_frames[color], self.holes, self.game_state, color)
@@ -150,7 +149,7 @@ class WhackAZombie:
                         self.game_state.start_time = pygame.time.get_ticks()
                         self.game_state.time_left = self.game_state.time_limit
                         self.game_state.state = "play"
-                        self.spawn_wave() # Spawn new zombies for new game
+                        self.spawn_wave()
                     elif 'intro' in button_rects and button_rects['intro'].collidepoint(event.pos):
                         self.game_state.reset()
                         self.zombies.clear()

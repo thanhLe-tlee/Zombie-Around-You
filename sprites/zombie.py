@@ -118,6 +118,13 @@ class Zombie:
                 img.set_alpha(self.alpha)
             screen.blit(img, self.rect)
 
+            # pygame.draw.rect(screen, (255, 0, 0), self.rect, 2)
+
+            # if hasattr(self, "current_hole"):
+            #     x, y = self.current_hole
+            #     pygame.draw.circle(screen, (0, 255, 0), (x, y), 5)
+            #     pygame.draw.circle(screen, (0, 0, 255), self.rect.midbottom, 5)
+
     def check_hit(self, pos):
         if self.active and not self.hit and self.rect.collidepoint(pos):
             self.state = "dead"
