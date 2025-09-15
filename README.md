@@ -58,7 +58,7 @@ Accuracy is calculated as:
 ## 🛠 Installation
 
 1. Install Python (>= 3.8).
-2. Install Pygame:
+2. Install requirement packages:
    ```bash
    pip install -r requirements.txt
    ```
