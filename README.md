@@ -1,4 +1,4 @@
-# 🧟 Whack a Zombie
+# 🧟 Zombie Around You
 
 A simple arcade-style **Whack-a-Mole** game implemented in **Python + Pygame**, where you use a hammer to whack zombies popping out of holes before time runs out.  
 
